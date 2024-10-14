@@ -158,7 +158,7 @@ class LimpiezaDatos:
 
 # Uso del script
 if __name__ == '__main__':
-    ruta_archivo = 'C:/Users/lopee/Documents/GitHub/Limpieza-de-datos-Python-/python/dataset/owid-covid-data.csv'
+    ruta_archivo = 'C:/Users/lopee/Documents/GitHub/Limpieza-de-datos-Python-/python/dataset/usp_drug_classification.csv'
     ruta_salida = 'C:/Users/lopee/Documents/GitHub/Limpieza-de-datos-Python-/python/dataset/dataset_limpio.csv'
     limpiador = LimpiezaDatos(ruta_archivo)
     limpiador.limpiar(umbral_columnas=0.5, metodo_relleno="media")
