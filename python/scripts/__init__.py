@@ -1,5 +1,7 @@
 import pandas as pd
-import psycopg2
+import requests
+import json
+
 
 class LimpiezaDatos:
     def __init__(self, ruta_archivo):
@@ -90,57 +92,30 @@ class LimpiezaDatos:
         self.df.to_csv(ruta_salida, index=False)
         print(f"\nDataset limpio exportado a: {ruta_salida}")
 
-    def enviar_a_postgresql(self, host, puerto, usuario, contrasena, db_name, tabla_destino):
+    def enviar_datos(self, url):
         """
-        Envía el dataset limpio a una base de datos PostgreSQL usando psycopg2.
+        Envía los datos a través de la API REST en formato JSON.
         """
-        try:
-            # Conectar a PostgreSQL usando psycopg2
-            conn = psycopg2.connect(
-                host=host,
-                port=puerto,
-                user=usuario,
-                password=contrasena,
-                dbname=db_name
-            )
-            cursor = conn.cursor()
+        for _, fila in self.df.iterrows():
+            # Preparar los datos a enviar
+            data = {
+                "uspCategory": fila['usp_category'],
+                "uspClass": fila['usp_class'],
+                "uspDrug": fila['usp_drug'],
+                "keggIdDrug": fila['kegg_id_drug'],
+                "drugExample": fila['drug_example'],
+                "nomenclature": fila['nomenclature']
+            }
+            headers = {'Content-Type': 'application/json'}
 
-            # Crear la tabla dinámicamente según las columnas del DataFrame
-            columnas = self.df.columns
-            tipos = []
+            # Enviar la solicitud POST al backend
+            response = requests.post(url, data=json.dumps(data), headers=headers)
 
-            for col in columnas:
-                if pd.api.types.is_numeric_dtype(self.df[col]):
-                    tipos.append(f"{col} FLOAT")  # Suponemos FLOAT para columnas numéricas
-                else:
-                    tipos.append(f"{col} VARCHAR(255)")  # VARCHAR para columnas de texto
-
-            # Crear la tabla si no existe
-            cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {tabla_destino} (
-                    id SERIAL PRIMARY KEY,
-                    {', '.join(tipos)}
-                );
-            """)
-            conn.commit()
-
-            # Insertar los datos dinámicamente
-            columnas_str = ', '.join(columnas)
-            valores_str = ', '.join(['%s'] * len(columnas))
-
-            for _, fila in self.df.iterrows():
-                cursor.execute(f"""
-                    INSERT INTO {tabla_destino} ({columnas_str})
-                    VALUES ({valores_str});
-                """, tuple(fila))
-            conn.commit()
-
-            print(f"\nDatos enviados a la base de datos en la tabla '{tabla_destino}' correctamente.")
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            print(f"Error al enviar los datos a la base de datos: {e}")
+            # Verificar el estado de la solicitud
+            if response.status_code == 201:
+                print(f"Datos enviados exitosamente: {data}")
+            else:
+                print(f"Error al enviar los datos: {response.status_code} - {response.text}")
 
     def limpiar(self, umbral_columnas=0.5, metodo_relleno="media"):
         """
@@ -156,20 +131,35 @@ class LimpiezaDatos:
         print("\nProceso de limpieza completado.")
 
 
-# Uso del script
 if __name__ == '__main__':
-    ruta_archivo = 'C:/Users/lopee/Documents/GitHub/Limpieza-de-datos-Python-/python/dataset/usp_drug_classification.csv'
-    ruta_salida = 'C:/Users/lopee/Documents/GitHub/Limpieza-de-datos-Python-/python/dataset/dataset_limpio.csv'
-    limpiador = LimpiezaDatos(ruta_archivo)
-    limpiador.limpiar(umbral_columnas=0.5, metodo_relleno="media")
-    limpiador.exportar_datos(ruta_salida)
+    try:
+        # Ruta al archivo CSV
+        ruta_archivo = 'C:/Users/lopee/OneDrive/Documentos/GitHub/Limpieza-de-datos-Python-/python/dataset/usp_drug_classification.csv'
+        ruta_salida = 'C:/Users/lopee/OneDrive/Documentos/GitHub/Limpieza-de-datos-Python-/python/dataset/dataset_limpio.csv'
 
-    # Configuración para conectarse a la base de datos [PostgreSQL Docker]
-    host = 'localhost'
-    puerto = '5432'
-    usuario = 'user'
-    contrasena = 'password'
-    db_name = 'mi_bd'
-    tabla_destino = 'dataset_limpio'
+        # Crear instancia de la clase LimpiezaDatos
+        limpiador = LimpiezaDatos(ruta_archivo)
 
-    limpiador.enviar_a_postgresql(host, puerto, usuario, contrasena, db_name, tabla_destino)
+        # Limpiar el dataset
+        print("Iniciando proceso de limpieza de datos...")
+        limpiador.limpiar(umbral_columnas=0.5, metodo_relleno="media")
+        print("Limpieza de datos completada.")
+
+        # Exportar los datos limpios a un nuevo archivo CSV
+        print(f"Exportando datos limpios a: {ruta_salida}")
+        limpiador.exportar_datos(ruta_salida)
+        print("Exportación completada con éxito.")
+
+        # URL del endpoint REST en el backend Spring Boot
+        url = 'http://localhost:8080/api/samples'
+
+        # Enviar datos a la API REST
+        print("Enviando datos a la API REST...")
+        limpiador.enviar_datos(url)
+
+    except FileNotFoundError as fnf_error:
+        print(f"Error: Archivo no encontrado - {fnf_error}")
+
+    except Exception as e:
+        print(f"Se produjo un error inesperado: {e}")
+
